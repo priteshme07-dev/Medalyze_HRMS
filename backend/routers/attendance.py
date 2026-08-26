@@ -181,12 +181,23 @@ async def end_break(request: Request, user: dict = Depends(get_current_user)):
     att = await db.attendance.find_one({"user_id": user["id"], "date": today_str()})
     if not att or not att.get("on_break"):
         raise HTTPException(status_code=400, detail="No break in progress")
-    b = await db.breaks.find_one({"attendance_id": att["id"], "end": None})
+    # ✅ FIX: Add organization_id filter to query
+    b = await db.breaks.find_one({"attendance_id": att["id"], "end": None, "organization_id": user["organization_id"]})
     if not b:
         raise HTTPException(status_code=400, detail="No active break found")
+    # ✅ FIX: Validate start timestamp exists and is not null
+    if not b.get("start"):
+        raise HTTPException(status_code=400, detail="Break start timestamp is missing")
+    # ✅ FIX: Handle invalid timestamp format
+    try:
+        start_dt = datetime.fromisoformat(b["start"])
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid break start timestamp format")
+    
     end = now_utc()
-    dur = round((end - datetime.fromisoformat(b["start"])).total_seconds() / 60.0)
-    await db.breaks.update_one({"id": b["id"]}, {"$set": {"end": end.isoformat(), "duration_minutes": dur}})
+    dur = round((end - start_dt).total_seconds() / 60.0)
+    # ✅ FIX: Add updated_at timestamp to maintain audit trail
+    await db.breaks.update_one({"id": b["id"]}, {"$set": {"end": end.isoformat(), "duration_minutes": dur, "updated_at": iso()}})
     await db.attendance.update_one({"id": att["id"]}, {"$set": {"on_break": False}})
     att = await db.attendance.find_one({"id": att["id"]})
     att = await recompute(att)
