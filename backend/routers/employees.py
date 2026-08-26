@@ -92,7 +92,19 @@ async def create_employee(body: EmployeeCreate, request: Request,
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already exists")
-    count = await db.users.count_documents({"organization_id": admin["organization_id"]})
+    
+    # ✅ FIX: Generate default employee_code if not provided
+    if body.employee_code:
+        # ✅ FIX: Validate employee_code is unique within organization
+        existing_code = await db.users.find_one({"organization_id": admin["organization_id"], 
+                                                  "employee_code": body.employee_code})
+        if existing_code:
+            raise HTTPException(status_code=400, detail="Employee code already exists")
+        employee_code = body.employee_code.strip()
+    else:
+        count = await db.users.count_documents({"organization_id": admin["organization_id"]})
+        employee_code = f"MED{1000 + count + 1}"
+    
     doc = {
         "id": str(uuid.uuid4()),
         "organization_id": admin["organization_id"],
@@ -107,7 +119,7 @@ async def create_employee(body: EmployeeCreate, request: Request,
         "scheduled_end": body.scheduled_end or "18:00",
         "working_days": body.working_days or ["Mon", "Tue", "Wed", "Thu", "Fri"],
         "working_days_idx": body.working_days_idx or [0, 1, 2, 3, 4],
-        "employee_code": body.employee_code or f"MED{1000 + count + 1}",
+        "employee_code": employee_code,
         "custom_fields": body.custom_fields or {},
         "created_at": iso(), "updated_at": iso(),
     }
@@ -127,9 +139,30 @@ async def update_employee(emp_id: str, body: EmployeeUpdate, request: Request,
     u = await db.users.find_one({"id": emp_id, "organization_id": admin["organization_id"]})
     if not u:
         raise HTTPException(status_code=404, detail="Employee not found")
+    
     updates = {k: v for k, v in body.data.items() if k in EDITABLE}
+    
+    # ✅ FIX: Validate email is unique
     if "email" in updates:
         updates["email"] = updates["email"].lower().strip()
+        existing_email = await db.users.find_one({"email": updates["email"], "id": {"$ne": emp_id}})
+        if existing_email:
+            raise HTTPException(status_code=400, detail="Email already exists")
+    
+    # ✅ FIX: Validate employee_code is not null and is unique
+    if "employee_code" in updates:
+        code = updates["employee_code"]
+        if not code or not str(code).strip():
+            raise HTTPException(status_code=400, detail="Employee code cannot be empty")
+        code = str(code).strip()
+        # Check uniqueness within organization (excluding current employee)
+        existing_code = await db.users.find_one({"organization_id": admin["organization_id"], 
+                                                  "employee_code": code, 
+                                                  "id": {"$ne": emp_id}})
+        if existing_code:
+            raise HTTPException(status_code=400, detail="Employee code already exists")
+        updates["employee_code"] = code
+    
     before, after = diff_fields(u, {**u, **updates}, set(updates.keys()))
     if not updates:
         raise HTTPException(status_code=400, detail="No editable fields provided")
