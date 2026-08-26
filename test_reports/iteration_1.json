@@ -1,0 +1,45 @@
+{
+  "summary": "Comprehensive backend API + light frontend smoke test for Medalyze HRMS. Backend: 37/38 pytest tests passed (97%). One real bug found: login rate-limit lockout is inverted and never triggers 429. Frontend loads, login works, dashboard renders with correct KPIs, sidebar navigation testids present.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/auth/login",
+        "issue": "Brute-force lockout does NOT trigger. In routers/auth.py line ~70, the ternary sets locked_until to a FUTURE time only when cnt < MAX_ATTEMPTS, and to current-time when cnt >= MAX_ATTEMPTS. This is inverted, so after 5+ wrong passwords the API keeps returning 401 instead of 429. Fix: swap branches -> `_lock_iso() if cnt >= MAX_ATTEMPTS else iso(now_utc()...)`. Verified via test_rate_limiting_lockout (5 wrong attempts -> got 401, expected 429).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix inverted rate-limit lockout condition in /app/backend/routers/auth.py (login handler) — currently locked_until is set to now on the 5th failure instead of now+15min, so 429 never returns."
+  ],
+  "critical_code_review_comments": [
+    "routers/auth.py login: locked_until ternary is inverted (see action item). Also the initial check compares `locked_until > now_utc()`, but on the 5th attempt locked_until is set to current time (immediately expired) — reinforcing the bug.",
+    "routers/leave.py list_requests: control-flow for `scope`/role filtering is convoluted (an inner `if is_admin(user) and scope != 'team': pass` inside a manager branch). Consider refactor for clarity; behavior currently correct in tested cases.",
+    "routers/attendance.py enrich_attendance leaks scheduled fields via clean() — acceptable, but audit fields aren't stripped from `shift_snapshot` on GET.",
+    "routers/reports.py has no date range validation; large orgs could hit the 5000 limit silently. Add pagination/warning.",
+    "routers/employees.py list_employees: raises 403 AFTER building query — minor; move check to top (already effectively first per code path, fine).",
+    "server.py CORS uses `os.environ.get('CORS_ORIGINS', '*').split(',')` with `allow_credentials=True` — if CORS_ORIGINS is unset, browsers will reject `*` with credentials. Ensure env is set in prod.",
+    "routers/clients.py list_portals returns portals for any user assigned to the client, including employees — verify by design (employees can view masked list but not reveal since reveal requires `client.portal.reveal` permission)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (new)"
+  ],
+  "success_rate": {"backend": "97% (37/38)", "frontend": "smoke passed"},
+  "test_credentials": "As per /app/memory/test_credentials.md — super_admin priteshme07@gmail.com, org_admin hr@medalyzeus.com, manager manager@medalyzeus.com, employees emp1/emp2/emp3@medalyzeus.com, password Medalyze@123",
+  "seed_data_creation": "Tests create/cleanup ephemeral employees, holidays, portals, org (TEST_ prefixed). One TEST_ORG_* is created per super-admin test run (not cleaned — main agent may wish to add teardown).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoints validated: auth (login/me/logout/forgot/reset/change-pw), employees CRUD + RBAC (admin/manager/employee scopes), leave (types/balances/validate/adjust/ledger), attendance today/list/RBAC, holidays CRUD + RBAC, clients (list/get/assign/portals-encrypted/reveal-audits), reports (JSON+CSV+Excel), audit logs, notifications, dashboard admin+employee, super admin orgs list+create. Multi-tenant isolation confirmed. One failing test: test_rate_limiting_lockout — do not mark app 'green' until lockout logic is fixed. Pytest must be run with `-n 0` because /app/backend/pytest.ini forces xdist -n 2 loadscope; the tests share a session fixture safe under single-worker. Frontend: sidebar has nav-dashboard/employees/attendance/clients/reports plus separate Leave Management + Leave Balances (nav-leave not present as single element — expected).",
+  "rca of the issue": "AuthN rate-limit RCA: In /app/backend/routers/auth.py the failed-login handler upserts a login_attempts record with `locked_until = iso(now_utc()) if cnt < MAX_ATTEMPTS else _lock_iso()`. The ternary is inverted — when cnt is below the threshold the code writes a FUTURE-in-name-only stamp equal to `now_utc()`, and only when cnt reaches MAX it should lock (`_lock_iso()` = now+15min) but the branches are swapped. Result: on the 5th failure, `locked_until` is set to the current instant which is immediately in the past, so the guard `locked_until > now_utc()` is false and login continues to return 401 forever. Reproduction: POST /api/auth/login 6 times with a bad password for the same email — expected 429 on the 6th call, actual 401. Mitigation: swap the branches: `\"locked_until\": _lock_iso() if cnt >= MAX_ATTEMPTS else iso(now_utc().replace(microsecond=0))`. Optionally also index login_attempts by identifier and purge on TTL."
+}

@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-head {
+    font-family: 'Manrope', sans-serif;
+}
+
+@layer base {
+    :root {
+        --background: 210 20% 98%;
+        --foreground: 162 84% 12%;
+        --card: 0 0% 100%;
+        --card-foreground: 162 84% 12%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 162 84% 12%;
+        --primary: 162 84% 17%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 84 60% 92%;
+        --secondary-foreground: 162 84% 17%;
+        --muted: 210 20% 96%;
+        --muted-foreground: 215 16% 42%;
+        --accent: 82 78% 55%;
+        --accent-foreground: 162 84% 15%;
+        --destructive: 0 72% 45%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 214 20% 90%;
+        --input: 214 20% 90%;
+        --ring: 82 78% 45%;
+        --radius: 0.5rem;
+        --chart-1: 162 84% 20%;
+        --chart-2: 82 78% 50%;
+        --chart-3: 173 58% 39%;
+        --chart-4: 43 74% 55%;
+        --chart-5: 0 72% 55%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border;
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+}
+
+.medalyze-sidebar {
+    background-color: #064E3B;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.stat-tile { transition: transform .15s ease, box-shadow .15s ease; }
+.stat-tile:hover { transform: translateY(-2px); }
+
+@keyframes fade-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fade-up .35s ease both; }

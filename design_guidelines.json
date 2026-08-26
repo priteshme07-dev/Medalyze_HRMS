@@ -1,0 +1,125 @@
+{
+  "theme": "light",
+  "brand_identity": {
+    "name": "Medalyze HRMS",
+    "company": "Medalyze Medtech LLP",
+    "website": "www.medalyzeus.com",
+    "style": "Professional, Minimal, Modern, Corporate, Clean, Fast, Accessible",
+    "logo_instruction": "Create an inline SVG logo matching: green medical + healthcare-tech mark (green cross, heartbeat line, upward arrow, circuit/radar rings) with 'MEDALYZE' wordmark in dark green. Do not use placeholder images for the logo."
+  },
+  "typography": {
+    "headings_font": "Manrope",
+    "body_font": "IBM Plex Sans",
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-extrabold tracking-tight text-primary-900",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight text-primary-900",
+      "h3": "text-xl sm:text-2xl font-semibold tracking-tight text-primary-800",
+      "h4": "text-lg sm:text-xl font-medium text-primary-800",
+      "body": "text-base leading-relaxed text-slate-700",
+      "small_label": "text-xs font-bold uppercase tracking-[0.2em] text-slate-500"
+    },
+    "rules": [
+      "DO NOT use Inter, Roboto, or Space Grotesk.",
+      "Always apply tight tracking (tracking-tight) to headings over text-2xl."
+    ]
+  },
+  "colors": {
+    "background": {
+      "page": "bg-[#F8FAFC]",
+      "surface": "bg-white",
+      "sidebar": "bg-[#064E3B]"
+    },
+    "brand": {
+      "dark_forest_green": "#064E3B",
+      "lime_green": "#84CC16",
+      "light_green": "#D9F99D"
+    },
+    "text": {
+      "primary": "text-[#064E3B]",
+      "secondary": "text-slate-600",
+      "inverse": "text-white"
+    },
+    "status": {
+      "present": "bg-emerald-100 text-emerald-800",
+      "absent": "bg-red-100 text-red-800",
+      "late": "bg-amber-100 text-amber-800",
+      "break": "bg-blue-100 text-blue-800"
+    },
+    "rules": [
+      "No full-screen gradients. Use solid colors and functional contrasts.",
+      "Use 'Tinted Grey' - ensure neutral greys lean slightly towards green to match the brand."
+    ]
+  },
+  "visual_enhancers": {
+    "borders": "1px solid border-slate-200. Cards should have no shadow or very subtle shadow-sm. The UI must feel crisp, cardless or flat rectangular.",
+    "radii": "max 8px border-radius (rounded-md or rounded-lg). Do not use excessive roundness.",
+    "surfaces": "Flat Solid surfaces. Avoid Glassmorphism as this is a medical/enterprise tool requiring high legibility and trust."
+  },
+  "grids_and_layouts": {
+    "desktop": {
+      "navigation": "Collapsible left sidebar (dark green background, white text) with an icon-only collapsed state.",
+      "dashboard_grid": "High Density Grid (Mode B): tight gaps (gap-4 or gap-6). Use grid-cols-1 md:grid-cols-3 lg:grid-cols-4 for stat cards."
+    },
+    "mobile": {
+      "navigation": "Hamburger menu or bottom navigation bar.",
+      "dashboard": "Mobile-first employee interface MUST prioritize massive, easily tappable action buttons for 'Start Break', 'End Break', 'Clock In', and 'Clock Out'. Make these span full width (w-full, py-6)."
+    },
+    "tables": "Compact, scannable table layouts with inline edit/actions. Data density is critical for Admin.",
+    "spacing": "Generous Spacing (p-6, p-8) inside major containers to prevent text collision, but tight spacing inside data tables and stat widgets."
+  },
+  "components": {
+    "buttons": "Pill-shaped or slightly rounded (rounded-md). High contrast. Primary buttons should be dark forest green. Attendance action buttons should use the lime green accent for 'Clock In' and distinct colors for Break.",
+    "cards": "Keep cards flat with subtle 1px borders. Do not overuse shadows.",
+    "forms": "Use Shadcn Form components. Left-align inputs and labels.",
+    "charts": "Use Recharts (via Shadcn) for attendance trends or leave balances."
+  },
+  "motion": {
+    "rules": [
+      "Minimal animations. Only use for micro-interactions (hover states, button presses, focus states).",
+      "Do not overuse animations.",
+      "Ensure all transitions are specific (e.g., transition-colors, transition-transform) rather than 'all'."
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "Ensure text meets APCA/WCAG standards (4.5:1 ratio).",
+      "Use focus:ring-2 focus:ring-lime-500 focus:ring-offset-2 for keyboard navigation.",
+      "All interactive elements MUST include data-testid attribute in kebab-case (e.g., data-testid='login-submit-button')."
+    ]
+  },
+  "media": {
+    "image_urls": {
+      "login_background": {
+        "url": "https://images.unsplash.com/photo-1781513144825-aa1e284c5950?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBtZWRpY2FsJTIwb2ZmaWNlJTIwaW50ZXJpb3J8ZW58MHx8fHwxNzg3NzU3NDYxfDA&ixlib=rb-4.1.0&q=85",
+        "description": "Modern medical office interior for login/auth page background."
+      },
+      "avatars": [
+        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwxfHxwcm9mZXNzaW9uYWwlMjBjb3Jwb3JhdGUlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc4Nzc1NzQ2MXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1609436132311-e4b0c9370469?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHwzfHxwcm9mZXNzaW9uYWwlMjBjb3Jwb3JhdGUlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc4Nzc1NzQ2MXww&ixlib=rb-4.1.0&q=85",
+        "https://images.unsplash.com/photo-1600878459138-e1123b37cb30?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxNzV8MHwxfHNlYXJjaHw0fHxwcm9mZXNzaW9uYWwlMjBjb3Jwb3JhdGUlMjBoZWFkc2hvdCUyMHBvcnRyYWl0fGVufDB8fHx8MTc4Nzc1NzQ2MXww&ixlib=rb-4.1.0&q=85",
+        "https://images.pexels.com/photos/11655430/pexels-photo-11655430.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+      ]
+    },
+    "rules": [
+      "DO NOT use generic placeholder URLs (e.g., via.placeholder.com). Use only the URLs provided above."
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build the 'Medalyze HRMS' enterprise SaaS platform as described.",
+    "Implement Role-Based Access Control (RBAC) UI variations: Employee dashboard features large attendance/timer buttons, while Admin dashboard features high-density tables and stat cards.",
+    "Ensure 'data-testid' is present on all functional buttons, links, inputs, and tabs.",
+    "Install and use @phosphor-icons/react or lucide-react for all iconography.",
+    "Build custom SVG components for the Medalyze logo as described in brand_identity.",
+    "Use Shadcn UI components but heavily customize their Tailwind classes to reflect the dark green/lime green brand palette and flat corporate aesthetic.",
+    "Do NOT use standard SaaS blue; replace all Shadcn default blues with the brand's greens.",
+    "Do not center-align the main app container. Always maintain standard block layouts.",
+    "Provide clear, readable tables for Employee Management and Leave Management with inline actions."
+  ],
+  "universal_guidelines": [
+    "Avoid generic, 'AI slop' aesthetics. Make the design feel like a premium, custom-built internal tool.",
+    "Create depth through intentional z-index hierarchy and crisp borders, not heavy shadows.",
+    "Never use emoji characters as icons.",
+    "Every interaction needs subtle micro-animations (hover, focus, active).",
+    "Missing categories should use relevant fallback icons or shapes, NOT placeholder image services."
+  ]
+}
