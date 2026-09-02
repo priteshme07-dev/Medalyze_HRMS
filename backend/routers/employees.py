@@ -47,10 +47,32 @@ def public_user(u):
     return u
 
 
+# Prefix used when auto-generating an employee_code for a new hire (no code supplied).
+# Standardized per client request: two-letter prefix + zero-padded 3-digit sequence (e.g. MM001).
+AUTO_CODE_PREFIX = "MM"
+
+
+async def next_available_employee_code(organization_id: str) -> str:
+    """Generate the next MM### employee code that isn't already taken.
+
+    Previously this just did `MED{1000 + count + 1}` from a raw document count, which
+    could collide with a manually-set or previously-freed code (this is how three employee
+    codes ended up duplicated in production). We now probe sequentially and skip anything
+    already in use, so a fresh code is always unique within the organization.
+    """
+    seq = await db.users.count_documents({"organization_id": organization_id}) + 1
+    while True:
+        candidate = f"{AUTO_CODE_PREFIX}{seq:03d}"
+        clash = await db.users.find_one({"organization_id": organization_id, "employee_code": candidate})
+        if not clash:
+            return candidate
+        seq += 1
+
+
 @router.get("")
 async def list_employees(request: Request, user: dict = Depends(get_current_user),
-                         search: Optional[str] = None, department: Optional[str] = None,
-                         status: Optional[str] = None):
+                          search: Optional[str] = None, department: Optional[str] = None,
+                          status: Optional[str] = None):
     q = {"organization_id": user["organization_id"]}
     if user["role"] == "manager" and not is_admin(user):
         q["manager_id"] = user["id"]
@@ -88,23 +110,22 @@ async def get_employee(emp_id: str, user: dict = Depends(get_current_user)):
 
 @router.post("")
 async def create_employee(body: EmployeeCreate, request: Request,
-                          admin: dict = Depends(require("employee.create"))):
+                           admin: dict = Depends(require("employee.create"))):
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(status_code=400, detail="Email already exists")
-    
-    # ✅ FIX: Generate default employee_code if not provided
+
     if body.employee_code:
         # ✅ FIX: Validate employee_code is unique within organization
-        existing_code = await db.users.find_one({"organization_id": admin["organization_id"], 
-                                                  "employee_code": body.employee_code})
+        existing_code = await db.users.find_one({"organization_id": admin["organization_id"],
+                                                   "employee_code": body.employee_code})
         if existing_code:
             raise HTTPException(status_code=400, detail="Employee code already exists")
         employee_code = body.employee_code.strip()
     else:
-        count = await db.users.count_documents({"organization_id": admin["organization_id"]})
-        employee_code = f"MED{1000 + count + 1}"
-    
+        # ✅ FIX: generate a code that is verified unique, instead of trusting a raw document count
+        employee_code = await next_available_employee_code(admin["organization_id"])
+
     doc = {
         "id": str(uuid.uuid4()),
         "organization_id": admin["organization_id"],
@@ -125,30 +146,30 @@ async def create_employee(body: EmployeeCreate, request: Request,
     }
     await db.users.insert_one(doc)
     await log_audit(organization_id=admin["organization_id"], actor=admin, action="EMPLOYEE_CREATED",
-                    entity_type="employee", entity_id=doc["id"], after=public_user(doc),
-                    reason="New employee onboarding", request=request)
+                     entity_type="employee", entity_id=doc["id"], after=public_user(doc),
+                     reason="New employee onboarding", request=request)
     await create_notification(organization_id=admin["organization_id"], user_id=doc["id"],
-                              ntype="admin_announcement", title="Welcome to Medalyze HRMS",
-                              message="Your employee account has been created.")
+                               ntype="admin_announcement", title="Welcome to Medalyze HRMS",
+                               message="Your employee account has been created.")
     return public_user(doc)
 
 
 @router.put("/{emp_id}")
 async def update_employee(emp_id: str, body: EmployeeUpdate, request: Request,
-                          admin: dict = Depends(require("employee.edit"))):
+                           admin: dict = Depends(require("employee.edit"))):
     u = await db.users.find_one({"id": emp_id, "organization_id": admin["organization_id"]})
     if not u:
         raise HTTPException(status_code=404, detail="Employee not found")
-    
+
     updates = {k: v for k, v in body.data.items() if k in EDITABLE}
-    
+
     # ✅ FIX: Validate email is unique
     if "email" in updates:
         updates["email"] = updates["email"].lower().strip()
         existing_email = await db.users.find_one({"email": updates["email"], "id": {"$ne": emp_id}})
         if existing_email:
             raise HTTPException(status_code=400, detail="Email already exists")
-    
+
     # ✅ FIX: Validate employee_code is not null and is unique
     if "employee_code" in updates:
         code = updates["employee_code"]
@@ -156,13 +177,13 @@ async def update_employee(emp_id: str, body: EmployeeUpdate, request: Request,
             raise HTTPException(status_code=400, detail="Employee code cannot be empty")
         code = str(code).strip()
         # Check uniqueness within organization (excluding current employee)
-        existing_code = await db.users.find_one({"organization_id": admin["organization_id"], 
-                                                  "employee_code": code, 
-                                                  "id": {"$ne": emp_id}})
+        existing_code = await db.users.find_one({"organization_id": admin["organization_id"],
+                                                   "employee_code": code,
+                                                   "id": {"$ne": emp_id}})
         if existing_code:
             raise HTTPException(status_code=400, detail="Employee code already exists")
         updates["employee_code"] = code
-    
+
     before, after = diff_fields(u, {**u, **updates}, set(updates.keys()))
     if not updates:
         raise HTTPException(status_code=400, detail="No editable fields provided")
@@ -172,24 +193,24 @@ async def update_employee(emp_id: str, body: EmployeeUpdate, request: Request,
     if "role" in updates:
         action = "ROLE_CHANGED"
     await log_audit(organization_id=admin["organization_id"], actor=admin, action=action,
-                    entity_type="employee", entity_id=emp_id, before=before, after=after,
-                    reason=body.reason, request=request)
+                     entity_type="employee", entity_id=emp_id, before=before, after=after,
+                     reason=body.reason, request=request)
     nu = await db.users.find_one({"id": emp_id})
     return public_user(nu)
 
 
 @router.delete("/{emp_id}")
 async def deactivate_employee(emp_id: str, request: Request,
-                              admin: dict = Depends(require("employee.deactivate")),
-                              reason: str = Query("Employee deactivated")):
+                               admin: dict = Depends(require("employee.deactivate")),
+                               reason: str = Query("Employee deactivated")):
     u = await db.users.find_one({"id": emp_id, "organization_id": admin["organization_id"]})
     if not u:
         raise HTTPException(status_code=404, detail="Employee not found")
     new_status = "inactive" if u.get("status") == "active" else "active"
     await db.users.update_one({"id": emp_id}, {"$set": {"status": new_status, "updated_at": iso()}})
     await log_audit(organization_id=admin["organization_id"], actor=admin,
-                    action="EMPLOYEE_DEACTIVATED" if new_status == "inactive" else "EMPLOYEE_REACTIVATED",
-                    entity_type="employee", entity_id=emp_id,
-                    before={"status": u.get("status")}, after={"status": new_status},
-                    reason=reason, request=request)
+                     action="EMPLOYEE_DEACTIVATED" if new_status == "inactive" else "EMPLOYEE_REACTIVATED",
+                     entity_type="employee", entity_id=emp_id,
+                     before={"status": u.get("status")}, after={"status": new_status},
+                     reason=reason, request=request)
     return {"message": f"Employee {new_status}", "status": new_status}
