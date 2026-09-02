@@ -28,6 +28,7 @@ export default function EmployeeDetail() {
   const [form, setForm] = useState({});
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
 
   const load = () => {
     api.get(`/employees/${id}`).then(({ data }) => { setEmp(data); setForm(data); });
@@ -44,7 +45,9 @@ export default function EmployeeDetail() {
 
   const save = async () => {
     setBusy(true);
-    const fields = ["first_name", "last_name", "email", "phone", "department", "designation", "role", "manager_id", "date_of_birth", "joining_date", "scheduled_start", "scheduled_end", "timezone"];
+    // ✅ FIX: Employee Code was not on this list, so it couldn't be edited anywhere in the UI
+    // even though the backend already supports and validates it.
+    const fields = ["first_name", "last_name", "email", "phone", "employee_code", "department", "designation", "role", "manager_id", "date_of_birth", "joining_date", "scheduled_start", "scheduled_end", "timezone"];
     const data = {}; fields.forEach((f) => { data[f] = form[f]; });
     try { await api.put(`/employees/${id}`, { reason: reason || "Employee record update", data }); toast.success("Employee updated"); setEdit(false); setReason(""); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } finally { setBusy(false); }
@@ -55,8 +58,10 @@ export default function EmployeeDetail() {
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
   const triggerReset = async () => {
-    try { const { data } = await api.post("/auth/admin-trigger-reset", { user_id: id }); toast.success("Reset link generated for employee"); }
+    setResetBusy(true);
+    try { await api.post("/auth/admin-trigger-reset", { user_id: id }); toast.success("Password reset link sent"); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+    finally { setResetBusy(false); }
   };
 
   const F = ({ label, k, type = "text", disabled }) => (
@@ -73,7 +78,7 @@ export default function EmployeeDetail() {
       <PageHeader title={`${emp.first_name} ${emp.last_name}`} subtitle={`${emp.employee_code} · ${emp.designation || "—"}`} testId="employee-detail"
         actions={isAdmin && (
           <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={triggerReset} data-testid="trigger-reset-btn"><KeyRound className="h-4 w-4 mr-2" />Reset Password</Button>
+            <Button variant="outline" onClick={triggerReset} disabled={resetBusy} data-testid="trigger-reset-btn">{resetBusy ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <KeyRound className="h-4 w-4 mr-2" />}Reset Password</Button>
             <Button variant="outline" onClick={toggleStatus} className={emp.status === "active" ? "text-red-600" : "text-emerald-600"} data-testid="toggle-status-btn"><Power className="h-4 w-4 mr-2" />{emp.status === "active" ? "Deactivate" : "Reactivate"}</Button>
             {!edit ? <Button onClick={() => setEdit(true)} className="bg-medalyze-dark hover:bg-medalyze-forest" data-testid="edit-employee-btn">Edit</Button>
               : <Button onClick={save} disabled={busy} className="bg-lime-500 hover:bg-lime-600 text-medalyze-dark" data-testid="save-employee-btn">{busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}<Save className="h-4 w-4 mr-2" />Save</Button>}
@@ -90,8 +95,9 @@ export default function EmployeeDetail() {
         <TabsContent value="info" className="mt-4 space-y-6">
           {edit && <div className="bg-amber-50 border border-amber-200 rounded-md p-3"><Label className="text-amber-800">Reason for change (audited)</Label><Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Department reassignment" data-testid="edit-reason" className="mt-1.5" /></div>}
           <div className="bg-white border border-border rounded-lg p-6 grid sm:grid-cols-2 gap-4">
-            <F label="First Name" k="first_name" /><F label="Last Name" k="last_name" />
-            <F label="Email" k="email" /><F label="Phone" k="phone" />
+            <F label="Employee Code" k="employee_code" /><F label="First Name" k="first_name" />
+            <F label="Last Name" k="last_name" /><F label="Email" k="email" />
+            <F label="Phone" k="phone" />
             <F label="Department" k="department" /><F label="Designation" k="designation" />
             <div><Label>Role</Label>{edit ? <Select value={form.role} onValueChange={(v) => set("role", v)}><SelectTrigger className="mt-1.5" data-testid="ed-role"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="employee">Employee</SelectItem><SelectItem value="manager">Reporting Manager</SelectItem><SelectItem value="org_admin">HR / Org Admin</SelectItem></SelectContent></Select> : <p className="mt-2"><Badge className="bg-medalyze-light/40 text-medalyze-dark border-transparent">{ROLE_LABEL[emp.role]}</Badge></p>}</div>
             <div><Label>Reporting Manager</Label>{edit ? <Select value={form.manager_id || ""} onValueChange={(v) => set("manager_id", v)}><SelectTrigger className="mt-1.5" data-testid="ed-manager"><SelectValue placeholder="None" /></SelectTrigger><SelectContent>{managers.map((m) => <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>)}</SelectContent></Select> : <p className="text-sm font-medium mt-2">{managers.find((m) => m.id === emp.manager_id)?.name || "—"}</p>}</div>
@@ -111,7 +117,13 @@ export default function EmployeeDetail() {
               <div className="space-y-1.5 text-sm">
                 {ledger.map((t) => (
                   <div key={t.id} className="flex items-center justify-between py-2 border-b border-border/60 last:border-0" data-testid={`ledger-${t.id}`}>
-                    <div><span className="font-medium text-slate-800">{t.transaction_type}</span> <span className="text-muted-foreground">· {t.leave_type_name}</span><div className="text-xs text-muted-foreground">{t.reason} · {fmtDateTime(t.created_at)}</div></div>
+                    <div>
+                      <span className="font-medium text-slate-800">{t.transaction_type}</span> <span className="text-muted-foreground">· {t.leave_type_name}</span>
+                      {/* ✅ FIX: derive the credited/used label from the amount's sign instead of
+                          trusting free-text `reason` alone, so a credit never reads as "used". */}
+                      <span className={`ml-2 text-[11px] font-semibold uppercase tracking-wide ${t.amount >= 0 ? "text-emerald-600" : "text-red-600"}`}>{t.amount >= 0 ? "Credited" : "Used"}</span>
+                      <div className="text-xs text-muted-foreground">{t.reason} · {fmtDateTime(t.created_at)}</div>
+                    </div>
                     <span className={`font-semibold ${t.amount >= 0 ? "text-emerald-600" : "text-red-600"}`}>{t.amount >= 0 ? "+" : ""}{t.amount}</span>
                   </div>
                 ))}

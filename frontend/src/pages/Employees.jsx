@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api, { formatApiError } from "@/lib/api";
@@ -59,8 +59,23 @@ export default function Employees() {
   const [managers, setManagers] = useState([]);
   const [q, setQ] = useState("");
 
-  const load = () => api.get("/employees", { params: { search: q || undefined } }).then(({ data }) => setRows(data));
-  useEffect(() => { load(); }, [q]);
+  // ✅ FIX: search fired one request per keystroke with nothing to stop an older, slower
+  // response from landing after a newer one and overwriting it with broader/stale results.
+  // A request-sequence guard ensures only the response for the most recently sent request is
+  // ever applied, and a debounce keeps us from firing a request on every keystroke at all.
+  const requestSeq = useRef(0);
+  const load = () => {
+    const mySeq = ++requestSeq.current;
+    return api.get("/employees", { params: { search: q || undefined } }).then(({ data }) => {
+      if (mySeq !== requestSeq.current) return; // a newer search superseded this one
+      setRows(data);
+    });
+  };
+  useEffect(() => {
+    const t = setTimeout(load, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
   useEffect(() => { api.get("/employees/managers").then(({ data }) => setManagers(data)); }, []);
 
   return (

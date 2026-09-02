@@ -19,9 +19,26 @@ export function fmtTime(iso) {
   catch { return "—"; }
 }
 
+// ✅ FIX: date-only strings ("YYYY-MM-DD") carry no timezone info. `new Date("2026-09-01")`
+// parses that as UTC midnight, and formatting it with the browser's local timezone rolls the
+// date back a full day for anyone west of UTC (the org's configured timezone is Asia/Kolkata,
+// UTC+5:30). Build the Date from the local calendar parts instead of routing a bare date
+// through a UTC parse, so the displayed day always matches the stored day regardless of the
+// viewer's timezone. Full timestamps (with a time component) are unaffected and still convert
+// to local time as before.
+function localDateOnly(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (!m) return null;
+  const [, y, mo, d] = m;
+  return new Date(Number(y), Number(mo) - 1, Number(d));
+}
+
 export function fmtDate(iso) {
   if (!iso) return "—";
-  try { return new Date(iso).toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" }); }
+  try {
+    const d = localDateOnly(iso) || new Date(iso);
+    return d.toLocaleDateString([], { day: "2-digit", month: "short", year: "numeric" });
+  }
   catch { return iso; }
 }
 

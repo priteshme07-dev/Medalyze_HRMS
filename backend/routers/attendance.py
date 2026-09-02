@@ -26,14 +26,28 @@ def today_str():
     return now_utc().date().isoformat()
 
 
+def parse_date_param(name: str, value: Optional[str]):
+    """Validate a `YYYY-MM-DD` query param. Returns None if not supplied, raises 400 if unparseable."""
+    if not value:
+        return None
+    try:
+        # Reject anything that isn't a clean 4-digit-year ISO date (e.g. "12026-09-01", "not-a-date").
+        if len(value) != 10:
+            raise ValueError("bad length")
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {name}: '{value}' is not a valid YYYY-MM-DD date")
+
+
 async def recompute(att):
     breaks = await db.breaks.find({"attendance_id": att["id"]}).to_list(100)
     login_t = datetime.fromisoformat(att["login_time"]) if att.get("login_time") else None
     logout_t = datetime.fromisoformat(att["logout_time"]) if att.get("logout_time") else None
     br = [{"start": b.get("start"), "end": b.get("end")} for b in breaks]
     metrics = compute_attendance(login_time=login_t, logout_time=logout_t, breaks=br,
-                                 shift=att.get("shift_snapshot", {}),
-                                 grace=att.get("shift_snapshot", {}).get("grace_minutes", DEFAULT_GRACE_MIN))
+                                  shift=att.get("shift_snapshot", {}),
+                                  grace=att.get("shift_snapshot", {}).get("grace_minutes", DEFAULT_GRACE_MIN))
     await db.attendance.update_one({"id": att["id"]}, {"$set": {**metrics, "updated_at": iso()}})
     att.update(metrics)
     return att
@@ -47,7 +61,7 @@ async def clock_in(request: Request, user: dict = Depends(get_current_user)):
     snap = await get_shift_snapshot(user)
     now = now_utc()
     doc = existing or {"id": str(uuid.uuid4()), "organization_id": user["organization_id"],
-                       "user_id": user["id"], "date": today_str(), "created_at": iso()}
+                        "user_id": user["id"], "date": today_str(), "created_at": iso()}
     doc.update({
         "scheduled_login": snap["scheduled_start"],
         "login_time": now.isoformat(),
@@ -63,10 +77,10 @@ async def clock_in(request: Request, user: dict = Depends(get_current_user)):
     doc = await recompute(doc)
     if doc.get("late_minutes", 0) > 0:
         await create_notification(organization_id=user["organization_id"], user_id=user["id"],
-                                  ntype="late_login", title="Late Login recorded",
-                                  message=f"You logged in {doc['late_minutes']} minutes late.")
+                                    ntype="late_login", title="Late Login recorded",
+                                    message=f"You logged in {doc['late_minutes']} minutes late.")
     await log_audit(organization_id=user["organization_id"], actor=user, action="ATTENDANCE_CREATED",
-                    entity_type="attendance", entity_id=doc["id"], request=request)
+                     entity_type="attendance", entity_id=doc["id"], request=request)
     return await enrich_attendance(doc)
 
 
@@ -82,10 +96,10 @@ async def clock_out(request: Request, user: dict = Depends(get_current_user)):
     att = await recompute(att)
     if att.get("status") == "incomplete_shift":
         await create_notification(organization_id=user["organization_id"], user_id=user["id"],
-                                  ntype="incomplete_shift", title="Incomplete Shift",
-                                  message="Your productive time today was below 8 hours.")
+                                    ntype="incomplete_shift", title="Incomplete Shift",
+                                    message="Your productive time today was below 8 hours.")
     await log_audit(organization_id=user["organization_id"], actor=user, action="ATTENDANCE_LOGOUT",
-                    entity_type="attendance", entity_id=att["id"], request=request)
+                     entity_type="attendance", entity_id=att["id"], request=request)
     return await enrich_attendance(att)
 
 
@@ -106,8 +120,8 @@ async def today(user: dict = Depends(get_current_user)):
 
 @router.get("")
 async def list_attendance(user: dict = Depends(get_current_user),
-                          user_id: Optional[str] = None, date_from: Optional[str] = None,
-                          date_to: Optional[str] = None, status: Optional[str] = None):
+                           user_id: Optional[str] = None, date_from: Optional[str] = None,
+                           date_to: Optional[str] = None, status: Optional[str] = None):
     q = {"organization_id": user["organization_id"]}
     if is_admin(user) or user["role"] == "manager":
         if user_id:
@@ -117,8 +131,20 @@ async def list_attendance(user: dict = Depends(get_current_user),
             q["user_id"] = {"$in": team}
     else:
         q["user_id"] = user["id"]
+
+    # ✅ FIX: validate date params (reject unparseable values instead of silently ignoring them)
+    # and apply whichever side of the range was actually supplied, instead of requiring both.
+    date_from = parse_date_param("date_from", date_from)
+    date_to = parse_date_param("date_to", date_to)
     if date_from and date_to:
+        if date_from > date_to:
+            raise HTTPException(status_code=400, detail="date_from cannot be after date_to")
         q["date"] = {"$gte": date_from, "$lte": date_to}
+    elif date_from:
+        q["date"] = {"$gte": date_from}
+    elif date_to:
+        q["date"] = {"$lte": date_to}
+
     if status:
         q["status"] = status
     items = []
@@ -138,7 +164,7 @@ class AttendanceEdit(BaseModel):
 
 @router.put("/{att_id}")
 async def edit_attendance(att_id: str, body: AttendanceEdit, request: Request,
-                          admin: dict = Depends(require("attendance.edit"))):
+                           admin: dict = Depends(require("attendance.edit"))):
     att = await db.attendance.find_one({"id": att_id, "organization_id": admin["organization_id"]})
     if not att:
         raise HTTPException(status_code=404, detail="Attendance not found")
@@ -150,8 +176,8 @@ async def edit_attendance(att_id: str, body: AttendanceEdit, request: Request,
     if "status" not in updates:
         att = await recompute(att)
     await log_audit(organization_id=admin["organization_id"], actor=admin, action="ATTENDANCE_EDITED",
-                    entity_type="attendance", entity_id=att_id, before=before, after=after,
-                    reason=body.reason, request=request)
+                     entity_type="attendance", entity_id=att_id, before=before, after=after,
+                     reason=body.reason, request=request)
     return clean(att)
 
 
@@ -172,7 +198,7 @@ async def start_break(request: Request, user: dict = Depends(get_current_user)):
     await db.breaks.insert_one(doc)
     await db.attendance.update_one({"id": att["id"]}, {"$set": {"on_break": True}})
     await log_audit(organization_id=user["organization_id"], actor=user, action="BREAK_STARTED",
-                    entity_type="break", entity_id=doc["id"], request=request)
+                     entity_type="break", entity_id=doc["id"], request=request)
     return clean(doc)
 
 
@@ -193,7 +219,7 @@ async def end_break(request: Request, user: dict = Depends(get_current_user)):
         start_dt = datetime.fromisoformat(b["start"])
     except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid break start timestamp format")
-    
+
     end = now_utc()
     dur = round((end - start_dt).total_seconds() / 60.0)
     # ✅ FIX: Add updated_at timestamp to maintain audit trail
@@ -203,10 +229,10 @@ async def end_break(request: Request, user: dict = Depends(get_current_user)):
     att = await recompute(att)
     if att.get("total_break_minutes", 0) > 60:
         await create_notification(organization_id=user["organization_id"], user_id=user["id"],
-                                  ntype="break_violation", title="Break Violation",
-                                  message=f"Total break time is {att['total_break_minutes']} minutes (limit 60).")
+                                    ntype="break_violation", title="Break Violation",
+                                    message=f"Total break time is {att['total_break_minutes']} minutes (limit 60).")
     await log_audit(organization_id=user["organization_id"], actor=user, action="BREAK_ENDED",
-                    entity_type="break", entity_id=b["id"], request=request)
+                     entity_type="break", entity_id=b["id"], request=request)
     return await enrich_attendance(att)
 
 

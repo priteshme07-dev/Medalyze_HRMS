@@ -28,7 +28,16 @@ export default function Holidays() {
     try { await api.post("/holidays", { ...form, optional: form.type === "optional" }); toast.success("Holiday added"); setOpen(false); setForm({ name: "", date: "", type: "company", description: "" }); load(); }
     catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
   };
-  const del = async (id) => { try { await api.delete(`/holidays/${id}`); toast.success("Removed"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); } };
+  const del = async (id, name) => {
+    // ✅ FIX: deleting fired immediately on click with no confirmation — a misclick removed a
+    // real holiday with no undo.
+    if (!window.confirm(`Remove the holiday "${name}"? This can't be undone.`)) return;
+    try { await api.delete(`/holidays/${id}`); toast.success("Removed"); load(); } catch (e) { toast.error(formatApiError(e.response?.data?.detail)); }
+  };
+
+  // ✅ FIX: neither the form nor the API rejected an empty Name/Date — Save now stays disabled
+  // until both are filled (the backend also now rejects a blank name/date server-side).
+  const canSave = form.name.trim().length > 0 && !!form.date;
 
   return (
     <>
@@ -48,7 +57,7 @@ export default function Holidays() {
                   </Select>
                 </div>
               </div>
-              <DialogFooter><Button onClick={add} className="bg-medalyze-dark hover:bg-medalyze-forest" data-testid="holiday-save">Save</Button></DialogFooter>
+              <DialogFooter><Button onClick={add} disabled={!canSave} className="bg-medalyze-dark hover:bg-medalyze-forest" data-testid="holiday-save">Save</Button></DialogFooter>
             </DialogContent>
           </Dialog>
         )} />
@@ -62,7 +71,7 @@ export default function Holidays() {
                   <TableCell className="font-medium">{h.name}</TableCell>
                   <TableCell>{fmtDate(h.date)}</TableCell>
                   <TableCell><Badge className={`${TYPE_CLS[h.type] || TYPE_CLS.custom} border-transparent capitalize`}>{(h.type || "").replace("_", " ")}</Badge></TableCell>
-                  {isAdmin && <TableCell className="text-right"><Button size="icon" variant="ghost" className="text-red-600" onClick={() => del(h.id)} data-testid={`del-holiday-${h.id}`}><Trash2 className="h-4 w-4" /></Button></TableCell>}
+                  {isAdmin && <TableCell className="text-right"><Button size="icon" variant="ghost" className="text-red-600" onClick={() => del(h.id, h.name)} data-testid={`del-holiday-${h.id}`}><Trash2 className="h-4 w-4" /></Button></TableCell>}
                 </TableRow>
               ))}
             </TableBody>
