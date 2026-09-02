@@ -11,6 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { CheckCircle2, XCircle, CalendarCheck, Clock, ThumbsUp } from "lucide-react";
 import { toast } from "sonner";
 
+// ✅ FIX: "withdrawn" is a real status a leave request can carry (see cancel_request in the
+// leave router), but it had no filter option — "all" was the only way to see withdrawn
+// requests. Added alongside the other statuses.
+const STATUS_OPTIONS = ["all", "pending_manager", "pending_hr", "approved", "rejected", "cancelled", "withdrawn"];
+
 export default function LeaveManagement() {
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState("all");
@@ -42,7 +47,7 @@ export default function LeaveManagement() {
       <div className="flex items-center gap-3 mb-4">
         <Label>Status</Label>
         <Select value={status} onValueChange={setStatus}><SelectTrigger className="w-56" data-testid="leave-status-filter"><SelectValue /></SelectTrigger>
-          <SelectContent>{["all", "pending_manager", "pending_hr", "approved", "rejected", "cancelled"].map((s) => <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
+          <SelectContent>{STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s.replace("_", " ")}</SelectItem>)}</SelectContent></Select>
       </div>
       <div className="bg-white border border-border rounded-lg overflow-hidden">
         {rows.length === 0 ? <EmptyState icon={CalendarCheck} title="No leave requests" /> : (

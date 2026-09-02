@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import api, { formatApiError } from "@/lib/api";
 import { PageHeader, AttStatusBadge, EmptyState } from "@/components/common";
 import { fmtDate, fmtTime, fmtMinutes } from "@/lib/format";
@@ -19,8 +19,36 @@ export default function AttendanceAdmin() {
   const [editRow, setEditRow] = useState(null);
   const [ef, setEf] = useState({ status: "", reason: "" });
 
-  const load = () => api.get("/attendance", { params: { date_from: range.from || undefined, date_to: range.to || undefined } }).then(({ data }) => setRows(data));
-  useEffect(() => { load(); }, [range]);
+  // ✅ FIX: keep the latest filter values in a ref so any caller of `load()` (including
+  // ClockWidget's onChange after a break start/end) always reads the current filter, and a
+  // request-sequence counter so a slower, older response can never overwrite a newer one.
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
+  const requestSeq = useRef(0);
+
+  const load = () => {
+    const mySeq = ++requestSeq.current;
+    const { from, to } = rangeRef.current;
+    return api
+      .get("/attendance", { params: { date_from: from || undefined, date_to: to || undefined } })
+      .then(({ data }) => {
+        // A newer request already started after this one — discard this stale response.
+        if (mySeq !== requestSeq.current) return;
+        setRows(data);
+      })
+      .catch((e) => {
+        if (mySeq !== requestSeq.current) return;
+        toast.error(formatApiError(e.response?.data?.detail));
+      });
+  };
+
+  // ✅ FIX: debounce filter changes so a date being typed digit-by-digit doesn't fire a
+  // request per keystroke (previously produced things like date_from=0002-09-01 mid-entry).
+  useEffect(() => {
+    const t = setTimeout(load, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
 
   const saveEdit = async () => {
     try { await api.put(`/attendance/${editRow.id}`, { reason: ef.reason || "Attendance correction", data: { status: ef.status } }); toast.success("Attendance updated"); setEditRow(null); load(); }
